@@ -17,7 +17,7 @@ def calculate_savings(inputs):
     if college_start_age <= current_age:
         st.error("College start age must be greater than current age")
         return None
-    if not (0 <= percent_to_cover <= 100):
+    if not (0 <= percent_to_cover <= 1):  # Changed range check to 0-1 since we divided by 100 above
         st.error("Percentage to cover must be between 0 and 100")
         return None
 
@@ -28,12 +28,19 @@ def calculate_savings(inputs):
 
     months_until_college = years_until_college * 12
     monthly_rate_of_return = (1 + rate_of_return) ** (1/12) - 1
-
-    if rate_of_return == 0:
-        monthly_savings = amount_to_cover / months_until_college
+    
+    # Fix for monthly savings calculation when already_saved is greater than amount_to_cover
+    if already_saved >= amount_to_cover:
+        monthly_savings = 0
+    elif rate_of_return == 0:
+        monthly_savings = (amount_to_cover - already_saved) / months_until_college
     else:
         monthly_savings = ((amount_to_cover - already_saved * (1 + rate_of_return) ** years_until_college) /
-                           (((1 + monthly_rate_of_return) ** months_until_college - 1) / monthly_rate_of_return))
+                         (((1 + monthly_rate_of_return) ** months_until_college - 1) / monthly_rate_of_return))
+
+    # Handle negative monthly savings
+    if monthly_savings < 0:
+        monthly_savings = 0
 
     cumulative_saved = [already_saved]
     cumulative_contributions = [already_saved]
@@ -59,7 +66,7 @@ def calculate_savings(inputs):
         'Age': ages,
         'Contributions': cumulative_contributions,
         'Earnings': cumulative_earnings,
-        'Total Savings': cumulative_contributions + cumulative_earnings  # Calculate total savings here
+        'Total Savings': [a + b for a, b in zip(cumulative_contributions, cumulative_earnings)]
     })
 
     fig = go.Figure()
@@ -102,19 +109,13 @@ def calculate_savings(inputs):
         font=dict(color="red"),
     )
 
-    annual_cost_formatted = f"${annual_cost:,.0f}"
-    already_saved_formatted = f"${already_saved:,.0f}"
-    total_future_cost_formatted = f"${total_future_cost:,.0f}"
-    future_cost_per_year_formatted = f"${future_cost_per_year:,.0f}"
-    monthly_savings_formatted = f"${monthly_savings:,.0f}"
-
     return {
-        "monthly_savings": monthly_savings_formatted, #returns formatted value
-        "total_future_cost": total_future_cost_formatted, #returns formatted value
-        "future_cost_per_year": future_cost_per_year_formatted, #returns formatted value
+        "monthly_savings": f"${monthly_savings:,.0f}",
+        "total_future_cost": f"${total_future_cost:,.0f}",
+        "future_cost_per_year": f"${future_cost_per_year:,.0f}",
         "fig": fig,
-        "annual_cost_formatted": annual_cost_formatted,
-        "already_saved_formatted": already_saved_formatted
+        "annual_cost_formatted": f"${annual_cost:,.0f}",
+        "already_saved_formatted": f"${already_saved:,.0f}"
     }
 
 st.title('College Savings Calculator')
@@ -125,26 +126,22 @@ with st.form("savings_calculator"):
     with col1:
         current_age = st.number_input('Current Age', value=5.0, step=0.1)
         college_start_age = st.number_input('College Start Age', value=18)
-
-        # Use text input with formatting for display, but store the numeric value
         annual_cost_display = st.text_input('Annual Cost ($)', value="$35,000")
         try:
-          annual_cost = int(annual_cost_display.replace("$", "").replace(",", ""))
+            annual_cost = float(annual_cost_display.replace("$", "").replace(",", ""))
         except ValueError:
-          st.error("Please enter a valid number for Annual Cost")
-          st.stop()
+            st.error("Please enter a valid number for Annual Cost")
+            st.stop()
         college_inflation_rate = st.number_input('College Inflation Rate (%)', value=4.0)
 
     with col2:
         years_of_college = st.number_input('Years of College', value=4)
-        
         already_saved_display = st.text_input('Already Saved ($)', value="$60,000")
         try:
-          already_saved = int(already_saved_display.replace("$", "").replace(",", ""))
+            already_saved = float(already_saved_display.replace("$", "").replace(",", ""))
         except ValueError:
-          st.error("Please enter a valid number for Already Saved")
-          st.stop()
-
+            st.error("Please enter a valid number for Already Saved")
+            st.stop()
         rate_of_return = st.number_input('Expected Return Rate (%)', value=7.0)
         percent_to_cover = st.number_input('Percent to Cover (%)', value=75.0)
 
@@ -165,9 +162,9 @@ if submit:
     results = calculate_savings(inputs)
     if results:
         st.header('Results')
-        st.metric('Monthly Savings Needed', results['monthly_savings']) #uses formatted value
-        st.metric('Total Future Cost', results['total_future_cost']) #uses formatted value
-        st.metric('Future Cost per Year', results['future_cost_per_year']) #uses formatted value
+        st.metric('Monthly Savings Needed', results['monthly_savings'])
+        st.metric('Total Future Cost', results['total_future_cost'])
+        st.metric('Future Cost per Year', results['future_cost_per_year'])
         st.metric('Annual College Cost (Today\'s Dollars)', results['annual_cost_formatted'])
         st.metric('Already Saved', results['already_saved_formatted'])
         st.plotly_chart(results['fig'], use_container_width=True)
